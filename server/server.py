@@ -7,17 +7,16 @@ import os
 import random
 import socket
 import struct
-from threading import Thread
 import time
 from contextlib import asynccontextmanager
+from threading import Thread
 
 import magic
+from db import File as FileModel
+from db import SessionLocal, init_db
 from fastapi import FastAPI, File, Response, UploadFile, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-
-from db import File as FileModel
-from db import SessionLocal, init_db
 
 try:
     SHARDS = int(os.environ["SHARDS"])
@@ -252,16 +251,25 @@ async def get_file(file_id: str):
             file_record.hmac,
         )
     mime_type = magic.from_buffer(contents, mime=True)
+    headers = {
+        "Cache-Control": "public, max-age=31536000, immutable",
+        "ETag": file_record.hmac,
+    }
 
     if mime_type:
-        return Response(content=contents, media_type=mime_type)
+        return Response(content=contents, media_type=mime_type, headers=headers)
     else:
         try:
-            return Response(content=contents.decode("utf-8"), media_type="text/plain")
+            return Response(
+                content=contents.decode("utf-8"),
+                media_type="text/plain",
+                headers=headers,
+            )
         except UnicodeDecodeError:
             return Response(
                 content=contents,
                 media_type="application/octet-stream",
+                headers=headers,
             )
 
 

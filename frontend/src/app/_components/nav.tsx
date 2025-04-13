@@ -60,7 +60,7 @@ export default function Navbar({ handleUpload }: { handleUpload: () => void }) {
     >
       {Button('/', <Home className="w-5 h-5" />, "Home")}
       {Button('/explorer', <GalleryVerticalEnd className="w-5 h-5" />, "Explorer")}
-      {Button('/upload', <CloudUpload className="w-5 h-5" />, "Upload", handleUpload)}
+      {Button('#', <CloudUpload className="w-5 h-5" />, "Upload", handleUpload)}
     </div>
   );
 };
