@@ -4,6 +4,7 @@ import { type Metadata } from "next";
 import { Figtree } from "next/font/google";
 import { Suspense } from "react";
 import ClientLayout from "./_components/clientLayout";
+import "@wooorm/starry-night/style/dark";
 
 export const metadata: Metadata = {
   title: "Sharder",

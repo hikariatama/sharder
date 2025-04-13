@@ -9,6 +9,8 @@ import { useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from "react";
 import { twMerge } from "tailwind-merge";
 import Confirm from "../_components/confirm";
+import {common, createStarryNight} from '@wooorm/starry-night'
+import {toHtml} from 'hast-util-to-html'
 
 interface File {
   id: string
@@ -29,7 +31,6 @@ export default function FileExplorerPage() {
   const [mimeType, setMimeType] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const { fileUploaded, setFileUploaded } = useFileEventContext();
-
   const urlCopiedRef = useRef<HTMLDivElement | null>(null);
 
   const searchParams = useSearchParams();
@@ -40,7 +41,7 @@ export default function FileExplorerPage() {
       const file = files.find((f) => f.id === fileIdFromQuery);
       if (file) {
         setSelectedFile(file);
-        void fetchFileContent(file.id);
+        void fetchFileContent(file.id, file.name);
       }
     }
   }, [fileIdFromQuery, files]);
@@ -56,7 +57,7 @@ export default function FileExplorerPage() {
         const file = data.find((f) => f.id === fileUploaded);
         if (file) {
           setSelectedFile(file);
-          void fetchFileContent(file.id);
+          void fetchFileContent(file.id, file.name);
         }
       }).catch((error) => {
         console.error("Error fetching files after upload:", error);
@@ -86,7 +87,7 @@ export default function FileExplorerPage() {
     }
   };
 
-  const fetchFileContent = async (fileId: string) => {
+  const fetchFileContent = async (fileId: string, filename: string) => {
     setIsFileContentLoading(true);
     setIsFileContentError(false);
     try {
@@ -94,9 +95,19 @@ export default function FileExplorerPage() {
       if (response.ok) {
         const data = await response.blob();
         const reader = new FileReader();
-        reader.onload = () => {
+        reader.onload = async () => {
           const content = reader.result;
-          setFileContent(content);
+          if (typeof content === "string") {
+            const starryNight = await createStarryNight(common);
+            let scope = starryNight.flagToScope(filename);
+            scope ??= "plaintext";
+            const html = toHtml(starryNight.highlight(content, scope));
+            console.log("HTML content:", html);
+            setFileContent(html.replaceAll("\n", "<br />"));
+            setMimeType("code");
+          } else {
+            setFileContent(content);
+          }
         };
         const mimeType = data.type;
         setMimeType(mimeType);
@@ -119,7 +130,7 @@ export default function FileExplorerPage() {
   const handleFileClick = (file: File) => {
     if (file.id === selectedFile?.id) return;
     setSelectedFile(file);
-    void fetchFileContent(file.id);
+    void fetchFileContent(file.id, file.name);
   };
 
   const deleteFile = async (fileId: string) => {
@@ -522,6 +533,15 @@ export default function FileExplorerPage() {
                     >
                       <p className="text-zinc-400">Audio player not supported.</p>
                     </audio>
+                  ) : mimeType === "code" ? (
+                    <pre className="text-xs text-white h-full w-full overflow-scroll p-4">
+                      <code>
+                      <div
+                        className="w-full h-full overflow-scroll"
+                        dangerouslySetInnerHTML={{ __html: fileContent as string }}
+                      />
+                    </code>
+                    </pre>
                   ) : (
                     <div className="flex items-center justify-center h-full">
                       <p className="text-zinc-400">Unsupported file type.</p>
