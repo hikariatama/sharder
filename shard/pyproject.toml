@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "sharder-shard"
+version = "0.1.0"
+description = "A decentralized file storage solution"
+authors = ["Daniil Gazizullin <d.gazizullin@innopolis.university>"]
+license = "MIT"
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
