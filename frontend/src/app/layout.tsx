@@ -9,7 +9,8 @@ import "@wooorm/starry-night/style/dark";
 export const metadata: Metadata = {
   title: "Sharder",
   description: "A decentralized file storage solution",
-  icons: [{ rel: "icon", url: "/favicon.ico" }],
+  keywords: ["Sharder", "decentralized", "file storage", "solution"],
+  icons: [{ rel: "icon", url: "/favicon.png" }],
 };
 
 const figtree = Figtree({
