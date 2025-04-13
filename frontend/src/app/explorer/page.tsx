@@ -3,14 +3,14 @@
 import { useFileEventContext } from "@/app/context/FileEventContext";
 import { env } from "@/env";
 import { formatSize } from "@/utils";
+import { common, createStarryNight } from '@wooorm/starry-night';
 import { motion } from "framer-motion";
+import { toHtml } from 'hast-util-to-html';
 import { ArrowLeft, Download, FileText, Link, LoaderCircle, Trash2 } from "lucide-react";
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { twMerge } from "tailwind-merge";
 import Confirm from "../_components/confirm";
-import {common, createStarryNight} from '@wooorm/starry-night'
-import {toHtml} from 'hast-util-to-html'
 
 interface File {
   id: string
@@ -32,40 +32,10 @@ export default function FileExplorerPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const { fileUploaded, setFileUploaded } = useFileEventContext();
   const urlCopiedRef = useRef<HTMLDivElement | null>(null);
+  const fetchControllerRef = useRef<AbortController | null>(null);
 
   const searchParams = useSearchParams();
   const fileIdFromQuery = searchParams.get("fileId");
-
-  useEffect(() => {
-    if (fileIdFromQuery && files.length > 0) {
-      const file = files.find((f) => f.id === fileIdFromQuery);
-      if (file) {
-        setSelectedFile(file);
-        void fetchFileContent(file.id, file.name);
-      }
-    }
-  }, [fileIdFromQuery, files]);
-
-  useEffect(() => {
-    void fetchFiles();
-  }, []);
-
-  useEffect(() => {
-    if (fileUploaded) {
-      fetchFiles().then((data: File[] | undefined) => {
-        if (!data) return;
-        const file = data.find((f) => f.id === fileUploaded);
-        if (file) {
-          setSelectedFile(file);
-          void fetchFileContent(file.id, file.name);
-        }
-      }).catch((error) => {
-        console.error("Error fetching files after upload:", error);
-      }).finally(() => {
-        setFileUploaded(null);
-      });
-    }
-  }, [fileUploaded, setFileUploaded, files]);
 
   const fetchFiles = async () => {
     setIsFileListLoading(true);
@@ -87,15 +57,26 @@ export default function FileExplorerPage() {
     }
   };
 
-  const fetchFileContent = async (fileId: string, filename: string) => {
+  const fetchFileContent = useCallback(async (fileId: string, filename: string) => {
+    if (fetchControllerRef.current) {
+      fetchControllerRef.current.abort();
+    }
+  
+    const controller = new AbortController();
+    fetchControllerRef.current = controller;
+  
     setIsFileContentLoading(true);
     setIsFileContentError(false);
     try {
-      const response = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/files/${fileId}`);
+      const response = await fetch(
+        `${env.NEXT_PUBLIC_BACKEND_URL}/files/${fileId}`,
+        { signal: controller.signal }
+      );
       if (response.ok) {
         const data = await response.blob();
         const reader = new FileReader();
         reader.onload = async () => {
+          if (fetchControllerRef.current !== controller) return;
           const content = reader.result;
           if (typeof content === "string") {
             const starryNight = await createStarryNight(common);
@@ -120,17 +101,21 @@ export default function FileExplorerPage() {
         setIsFileContentError(true);
       }
     } catch (error) {
+      if ((error as DOMException).name === "AbortError") {
+        return;
+      }
       console.error("Error fetching file content:", error);
       setIsFileContentError(true);
     } finally {
-      setIsFileContentLoading(false);
+      if (fetchControllerRef.current === controller) {
+        setIsFileContentLoading(false);
+      }
     }
-  };
+  }, []);
 
   const handleFileClick = (file: File) => {
     if (file.id === selectedFile?.id) return;
     setSelectedFile(file);
-    void fetchFileContent(file.id, file.name);
   };
 
   const deleteFile = async (fileId: string) => {
@@ -280,6 +265,42 @@ export default function FileExplorerPage() {
       ))}
     </div>
   );
+
+
+  useEffect(() => {
+    if (fileIdFromQuery && files.length > 0) {
+      const file = files.find((f) => f.id === fileIdFromQuery);
+      if (file) {
+        setSelectedFile(file);
+      }
+    }
+  }, [fileIdFromQuery, files]);
+
+  useEffect(() => {
+    void fetchFiles();
+  }, []);
+
+  useEffect(() => {
+    if (fileUploaded) {
+      fetchFiles().then((data: File[] | undefined) => {
+        if (!data) return;
+        const file = data.find((f) => f.id === fileUploaded);
+        if (file) {
+          setSelectedFile(file);
+        }
+      }).catch((error) => {
+        console.error("Error fetching files after upload:", error);
+      }).finally(() => {
+        setFileUploaded(null);
+      });
+    }
+  }, [fileUploaded, setFileUploaded, files]);
+
+  useEffect(() => {
+    if (selectedFile) {
+      void fetchFileContent(selectedFile.id, selectedFile.name);
+    }
+  }, [selectedFile, fetchFileContent]);
 
   return (
     <>
@@ -536,11 +557,11 @@ export default function FileExplorerPage() {
                   ) : mimeType === "code" ? (
                     <pre className="text-xs text-white h-full w-full overflow-scroll p-4">
                       <code>
-                      <div
-                        className="w-full h-full overflow-scroll"
-                        dangerouslySetInnerHTML={{ __html: fileContent as string }}
-                      />
-                    </code>
+                        <div
+                          className="w-full h-full overflow-scroll"
+                          dangerouslySetInnerHTML={{ __html: fileContent as string }}
+                        />
+                      </code>
                     </pre>
                   ) : (
                     <div className="flex items-center justify-center h-full">
