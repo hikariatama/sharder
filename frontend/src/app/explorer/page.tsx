@@ -4,7 +4,7 @@ import { useFileEventContext } from "@/app/context/FileEventContext";
 import { env } from "@/env";
 import { formatSize } from "@/utils";
 import { motion } from "framer-motion";
-import { Download, FileText, Link, LoaderCircle, Trash2 } from "lucide-react";
+import { ArrowLeft, Download, FileText, Link, LoaderCircle, Trash2 } from "lucide-react";
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from "react";
 import { twMerge } from "tailwind-merge";
@@ -170,7 +170,7 @@ export default function FileExplorerPage() {
             key={file.id}
             onClick={() => handleFileClick(file)}
             className={twMerge(
-              "flex justify-between p-2 rounded transition-colors duration-200 ease-in-out text-sm",
+              "flex justify-between p-2 rounded transition-colors duration-200 ease-in-out text-sm border-1 border-zinc-700 md:border-0",
               selectedFile?.id === file.id
                 ? "bg-blue-500/10 text-blue-500"
                 : "text-zinc-400 hover:bg-zinc-400/10 hover:text-zinc-200 cursor-pointer",
@@ -431,8 +431,11 @@ export default function FileExplorerPage() {
         }`}
       </style>
       <div className="flex items-center justify-center min-h-screen tracking-wide">
-        <div className="flex flex-col md:flex-row w-full h-[80vh] max-w-6xl border border-zinc-400 rounded-lg shadow-lg overflow-hidden">
-          <div className="w-full md:w-1/3 p-4 border-r border-zinc-400 h-[80vh] overflow-y-scroll overflow-x-hidden">
+        <div className="flex flex-col md:flex-row w-full h-[80vh] max-w-6xl md:border border-zinc-400 rounded-lg shadow-lg overflow-hidden">
+          <div className={twMerge(
+            "w-full md:w-1/3 p-4 md:border-r border-zinc-400 h-[80vh] overflow-y-scroll overflow-x-hidden",
+            selectedFile ? "hidden md:block" : "block",
+          )}>
             {isFileListLoading && (
               <div className="flex gap-2">
                 <LoaderCircle className="w-5 h-5 animate-spin text-zinc-400" />
@@ -448,7 +451,22 @@ export default function FileExplorerPage() {
               renderFiles(files)
             )}
           </div>
-          <div className="w-full md:w-2/3 flex justify-center items-center">
+          {selectedFile && (
+            <div className="flex md:hidden flex-col items-center justify-center w-full h-fit p-4">
+              <h2 className="text-lg text-zinc-300 font-semibold mb-2">{selectedFile.name}</h2>
+              <button
+                onClick={() => setSelectedFile(null)}
+                className="text-blue-500 hover:text-blue-400 transition-colors duration-150 ease-out flex items-center gap-1"
+              >
+                <ArrowLeft className="w-5 h-5" />
+                Back to file list
+              </button>
+            </div>
+          )}
+          <div className={twMerge(
+            "w-full md:w-2/3 justify-center items-center shrink-0",
+            selectedFile ? "flex" : "hidden md:flex",
+          )}>
             {selectedFile ? (
               isFileContentLoading ? (
                 <div className="flex gap-2 p-4">
@@ -458,56 +476,58 @@ export default function FileExplorerPage() {
               ) : isFileContentError ? (
                 <p className="text-red-500 p-4">Error loading file content.</p>
               ) : (
-                mimeType?.startsWith("text/") && typeof fileContent === "string" ? (
-                  <motion.pre
-                    className="text-xs text-zinc-300 h-[80vh] w-full overflow-scroll p-4"
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    {fileContent}
-                  </motion.pre>
-                ) : mimeType?.startsWith("image/") ? (
-                  <motion.img
-                    src={URL.createObjectURL(new Blob([fileContent as ArrayBuffer], { type: mimeType }))}
-                    alt={selectedFile.name}
-                    className="max-h-96 max-w-full object-contain"
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.2 }}
-                  />
-                ) : mimeType?.startsWith("application/pdf") ? (
-                  <object
-                    data={URL.createObjectURL(new Blob([fileContent as ArrayBuffer], { type: mimeType }))}
-                    type="application/pdf"
-                    className="w-full h-full"
-                    aria-label="PDF Viewer"
-                  >
-                    <p className="text-zinc-400">PDF viewer not supported.</p>
-                  </object>
-                ) : mimeType?.startsWith("video/") ? (
-                  <video
-                    controls
-                    className="w-full h-full"
-                    src={URL.createObjectURL(new Blob([fileContent as ArrayBuffer], { type: mimeType }))}
-                    aria-label="Video Player"
-                  >
-                    <p className="text-zinc-400">Video player not supported.</p>
-                  </video>
-                ) : mimeType?.startsWith("audio/") ? (
-                  <audio
-                    controls
-                    className="w-full h-full"
-                    src={URL.createObjectURL(new Blob([fileContent as ArrayBuffer], { type: mimeType }))}
-                    aria-label="Audio Player"
-                  >
-                    <p className="text-zinc-400">Audio player not supported.</p>
-                  </audio>
-                ) : (
-                  <div className="flex items-center justify-center h-full">
-                    <p className="text-zinc-400">Unsupported file type.</p>
-                  </div>
-                )
+                <div className="w-full h-[70vh] md:h-[80vh]">
+                  {mimeType?.startsWith("text/") && typeof fileContent === "string" ? (
+                    <motion.pre
+                      className="text-xs text-zinc-300 h-full w-full overflow-scroll p-4"
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      {fileContent}
+                    </motion.pre>
+                  ) : mimeType?.startsWith("image/") ? (
+                    <motion.img
+                      src={URL.createObjectURL(new Blob([fileContent as ArrayBuffer], { type: mimeType }))}
+                      alt={selectedFile.name}
+                      className="w-full object-contain"
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.2 }}
+                    />
+                  ) : mimeType?.startsWith("application/pdf") ? (
+                    <object
+                      data={URL.createObjectURL(new Blob([fileContent as ArrayBuffer], { type: mimeType }))}
+                      type="application/pdf"
+                      className="w-full h-full"
+                      aria-label="PDF Viewer"
+                    >
+                      <p className="text-zinc-400">PDF viewer not supported.</p>
+                    </object>
+                  ) : mimeType?.startsWith("video/") ? (
+                    <video
+                      controls
+                      className="w-full"
+                      src={URL.createObjectURL(new Blob([fileContent as ArrayBuffer], { type: mimeType }))}
+                      aria-label="Video Player"
+                    >
+                      <p className="text-zinc-400">Video player not supported.</p>
+                    </video>
+                  ) : mimeType?.startsWith("audio/") ? (
+                    <audio
+                      controls
+                      className="w-full"
+                      src={URL.createObjectURL(new Blob([fileContent as ArrayBuffer], { type: mimeType }))}
+                      aria-label="Audio Player"
+                    >
+                      <p className="text-zinc-400">Audio player not supported.</p>
+                    </audio>
+                  ) : (
+                    <div className="flex items-center justify-center h-full">
+                      <p className="text-zinc-400">Unsupported file type.</p>
+                    </div>
+                  )}
+                </div>
               )
             ) : (
               <div className="flex items-center justify-center h-full">
