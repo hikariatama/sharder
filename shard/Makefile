@@ -5,13 +5,13 @@ BIN_NAME = shard
 CXXFLAGS = -O2 -std=c++17
 LDFLAGS = -lcurl
 DOCKER_IMAGE = linux-builder
-DOCKER_RUN = docker run --rm -v "$(PWD)":/project -w /project $(DOCKER_IMAGE)
+DOCKER_RUN = docker run --rm -v "$(shell pwd)":/project -w /project $(DOCKER_IMAGE)
 
 build:
 	mkdir -p $(BUILD_DIR)
 	g++ $(CXXFLAGS) $(SRC) -o $(BUILD_DIR)/$(BIN_NAME) $(LDFLAGS)
 
-cross: 
+cross:
 	mkdir -p $(BUILD_DIR)
 	$(MAKE) linux_x86_64
 	$(MAKE) linux_arm64
