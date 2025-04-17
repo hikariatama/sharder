@@ -4,11 +4,6 @@ import argparse
 
 parser = argparse.ArgumentParser(description="Generate a docker-compose.yml file.")
 parser.add_argument(
-    "--shards",
-    type=str,
-    help="Comma-separated list of shards. Each shard should be in the format 'host:port'.",
-)
-parser.add_argument(
     "--chunks-per-file",
     type=int,
     help="Number of chunks per file. This is the number of chunks in which the file will be split before replicating on the shards.",
@@ -27,8 +22,6 @@ parser.add_argument(
     default=80,
 )
 args = parser.parse_args()
-
-shards = args.shards.split(",")
 
 PG_PASSWORD = os.urandom(16).hex()
 
@@ -52,7 +45,6 @@ base = {
                 "HMAC_SECRET": os.urandom(16).hex(),
                 "CONNECTION_SECRET": os.urandom(16).hex(),
                 "DB_URL": f"postgresql://shard:{PG_PASSWORD}@postgres/shard",
-                **{f"SHARD_{i + 1}": shard for i, shard in enumerate(shards)},
             },
         },
         "nginx": {
