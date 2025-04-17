@@ -1,10 +1,11 @@
+import { AuthProvider } from "@/app/context/AuthContext";
 import { FileEventProvider } from "@/app/context/FileEventContext";
 import "@/styles/globals.css";
+import "@wooorm/starry-night/style/dark";
 import { type Metadata } from "next";
 import { Figtree } from "next/font/google";
 import { Suspense } from "react";
 import ClientLayout from "./_components/clientLayout";
-import "@wooorm/starry-night/style/dark";
 
 export const metadata: Metadata = {
   title: "Sharder",
@@ -24,12 +25,14 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${figtree.className}`}>
       <body>
-        <FileEventProvider>
-          <main className="w-full h-full min-h-screen min-w-screen bg-[#080910]">
-            <Suspense>{children}</Suspense>
-            <ClientLayout />
-          </main>
-        </FileEventProvider>
+        <AuthProvider>
+          <FileEventProvider>
+            <main className="w-full h-full min-h-screen min-w-screen bg-[#080910]">
+              <Suspense>{children}</Suspense>
+              <ClientLayout />
+            </main>
+          </FileEventProvider>
+        </AuthProvider>
       </body>
     </html>
   );

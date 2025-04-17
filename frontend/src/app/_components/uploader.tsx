@@ -4,6 +4,7 @@ import { useFileEventContext } from "@/app/context/FileEventContext";
 import { env } from "@/env";
 import { motion } from "framer-motion";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
+import { twMerge } from "tailwind-merge";
 
 export const Upload = forwardRef<
   { isUploading: boolean; isDrag: boolean; inputRef: HTMLInputElement | null },
@@ -13,6 +14,8 @@ export const Upload = forwardRef<
   const [isDrag, setIsDrag] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const { setFileUploaded } = useFileEventContext();
+  const [fileCount, setFileCount] = useState(0);
+  const [isDrop, setIsDrop] = useState(false);
 
   useImperativeHandle(ref, () => ({
     isUploading,
@@ -46,6 +49,9 @@ export const Upload = forwardRef<
     void Promise.all(uploadPromises)
       .finally(() => {
         setIsUploading(false);
+        setIsDrag(false);
+        setIsDrop(false);
+        setFileCount(0);
       });
   };
 
@@ -58,7 +64,9 @@ export const Upload = forwardRef<
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDrag(false);
+    setIsDrop(true);
     if (e.dataTransfer.files) {
+      setFileCount(Array.from(e.dataTransfer.files).length);
       handleSubmit(e.dataTransfer.files);
     }
   };
@@ -80,15 +88,37 @@ export const Upload = forwardRef<
         Release to upload
       </motion.div>
       <motion.div
-        className="fixed w-8 h-8 border-8 border-white rounded-full blur-lg flex items-center justify-center pointer-events-none"
+        className={twMerge(
+          "fixed w-8 h-8 border-8 border-white rounded-full blur-sm flex items-center justify-center pointer-events-none",
+          isUploading && "animate-pulse border-blue-200"
+        )}
         style={{
           left: `${cursorPosition.x - 12}px`,
           top: `${cursorPosition.y - 12}px`,
         }}
         initial={{ scale: 0 }}
-        animate={{ scale: isDrag ? 1 : 0 }}
+        animate={{ scale: (isDrag || isDrop && isUploading) ? 1 : 0 }}
         transition={{ duration: 0.15, ease: "easeInOut" }}
       />
+      {isUploading && isDrop && fileCount > 1 && (
+        Array.from({ length: fileCount }, (_, i) => {
+          const angle = (2 * Math.PI * i) / fileCount;
+          const radius = 20;
+          const offsetX = Math.cos(angle) * radius * 2 + Math.random() * 5;
+          const offsetY = Math.sin(angle) * radius + Math.random() * 5;
+          return (
+            <div
+              key={i}
+              className="fixed w-8 h-8 border-8 border-blue-200 rounded-full blur-sm flex items-center justify-center pointer-events-none animate-pulse"
+              style={{
+                left: `${cursorPosition.x - 12 + offsetX}px`,
+                top: `${cursorPosition.y - 12 + offsetY}px`,
+                animationDelay: `${i * 0.1 + 0.1}s`,
+              }}
+            />
+          );
+        })
+      )}
       <div
         onDragOver={(e) => {
           e.preventDefault();

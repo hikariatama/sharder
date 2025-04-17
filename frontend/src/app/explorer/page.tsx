@@ -7,10 +7,11 @@ import { common, createStarryNight } from '@wooorm/starry-night';
 import { motion } from "framer-motion";
 import { toHtml } from 'hast-util-to-html';
 import { ArrowLeft, Download, FileText, Link, LoaderCircle, Trash2 } from "lucide-react";
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from "react";
 import { twMerge } from "tailwind-merge";
 import Confirm from "../_components/confirm";
+import { useAuthContext } from "../context/AuthContext";
 
 interface File {
   id: string
@@ -33,6 +34,8 @@ export default function FileExplorerPage() {
   const { fileUploaded, setFileUploaded } = useFileEventContext();
   const urlCopiedRef = useRef<HTMLDivElement | null>(null);
   const fetchControllerRef = useRef<AbortController | null>(null);
+  const { id: userId, isLoading: isAuthLoading } = useAuthContext();
+  const router = useRouter();
 
   const searchParams = useSearchParams();
   const fileIdFromQuery = searchParams.get("fileId");
@@ -61,10 +64,10 @@ export default function FileExplorerPage() {
     if (fetchControllerRef.current) {
       fetchControllerRef.current.abort();
     }
-  
+
     const controller = new AbortController();
     fetchControllerRef.current = controller;
-  
+
     setIsFileContentLoading(true);
     setIsFileContentError(false);
     try {
@@ -301,6 +304,19 @@ export default function FileExplorerPage() {
       void fetchFileContent(selectedFile.id, selectedFile.name);
     }
   }, [selectedFile, fetchFileContent]);
+
+  if (isAuthLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <LoaderCircle className="w-5 h-5 animate-spin text-zinc-400" />
+      </div>
+    );
+  }
+
+  if (!userId) {
+    router.push("/auth");
+    return;
+  }
 
   return (
     <>
