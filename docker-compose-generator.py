@@ -69,7 +69,6 @@ base = {
     },
     "volumes": {
         "postgres-storage": {},
-        "shard-storage": {},
     },
     "networks": {"shard_net": {}},
 }
