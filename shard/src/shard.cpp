@@ -72,8 +72,7 @@ public:
 
     std::vector<uint8_t> load(const std::string &hmac, uint32_t chunk_index)
     {
-        fs::path file_path = base / hmac.substr(0, 2) / hmac.substr(2, 2) / hmac /
-                             fmt_chunk_index(chunk_index);
+        fs::path file_path = base / hmac.substr(0, 2) / hmac.substr(2, 2) / hmac / fmt_chunk_index(chunk_index);
 
         if (!fs::exists(file_path))
             return {};
@@ -249,16 +248,8 @@ private:
         uint16_t hmac_len = ntohs(*reinterpret_cast<uint16_t *>(&header[1]));
         std::string hmac(reinterpret_cast<char *>(&header[3]), hmac_len);
 
-        if (disk.destroy(hmac))
-        {
-            uint8_t ok = 0x01;
-            send(fd, &ok, 1, 0);
-        }
-        else
-        {
-            uint8_t fail = 0x00;
-            send(fd, &fail, 1, 0);
-        }
+        uint8_t status = disk.destroy(hmac) ? 0x01 : 0x00;
+        send(fd, &status, 1, 0);
     }
 
     void handle_ping(int fd)
@@ -294,9 +285,7 @@ void register_shard(const std::string &url, const std::string &host, int port)
         return;
 
     std::ostringstream json;
-    json << "{";
-    json << "\"host\":\"" << host << "\",";
-    json << "\"port\":" << port << "}";
+    json << "{" << "\"host\":\"" << host << "\"," << "\"port\":" << port << "}";
     std::string json_str = json.str();
 
     struct curl_slist *headers = nullptr;
@@ -308,73 +297,40 @@ void register_shard(const std::string &url, const std::string &host, int port)
     curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, json_str.size());
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
 
-    std::string response;
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, +[](char *ptr, size_t size, size_t nmemb, std::string *data)
-                                                  {
-        data->append(ptr, size * nmemb);
-        return size * nmemb; });
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
-
-    CURLcode res = curl_easy_perform(curl);
-    if (res != CURLE_OK)
-    {
-        std::cerr << "CURL error: " << curl_easy_strerror(res) << std::endl;
-    }
-
+    curl_easy_perform(curl);
     curl_easy_cleanup(curl);
     curl_slist_free_all(headers);
 }
 
-bool setup_systemd_service(const std::string &exec_path, const std::string &url)
+bool setup_systemd_service(const std::string &exec_path, const std::string &url, bool override_unit)
 {
-    struct passwd *pw = getpwuid(geteuid());
-    if (pw && std::string(pw->pw_name) == "shard")
-    {
-        return false;
-    }
-
     std::string service_path = "/etc/systemd/system/shard.service";
-    std::ofstream service_file(service_path);
-    if (!service_file.is_open())
-    {
-        std::cerr << "Failed to create systemd service file. Try running as root." << std::endl;
-        exit(1);
-    }
 
-    if (fs::exists(service_path) && fs::file_size(service_path) > 0)
+    if (fs::exists(service_path))
     {
-        return false;
+        if (override_unit)
+        {
+            system("systemctl stop shard.service");
+            fs::remove(service_path);
+        }
+        else
+        {
+            return false;
+        }
     }
 
     fs::path target_dir = "/opt/shard";
     fs::create_directories(target_dir);
     fs::copy(exec_path, target_dir / fs::path(exec_path).filename(), fs::copy_options::overwrite_existing);
-
-    if (system("id -u shard > /dev/null 2>&1") != 0)
-    {
-        if (system("useradd -r -s /bin/false shard") != 0)
-        {
-            std::cerr << "Failed to create user 'shard'. Please create it manually." << std::endl;
-            exit(1);
-        }
-    }
-
+    system("id -u shard > /dev/null 2>&1 || useradd -r -s /bin/false shard");
     system(("chown -R shard " + target_dir.string()).c_str());
     system(("chmod -R 755 " + target_dir.string()).c_str());
 
-    service_file << "[Unit]\n";
-    service_file << "Description=Sharder Service\n";
-    service_file << "After=network.target\n\n";
-
-    service_file << "[Service]\n";
-    service_file << "Type=simple\n";
-    service_file << "ExecStart=" << (target_dir / fs::path(exec_path).filename()).string() << " " << url << "\n";
-    service_file << "Restart=on-failure\n";
-    service_file << "User=shard\n";
-    service_file << "WorkingDirectory=" << target_dir.string() << "\n\n";
-
-    service_file << "[Install]\n";
-    service_file << "WantedBy=multi-user.target\n";
+    std::ofstream service_file(service_path);
+    service_file << "[Unit]\nDescription=Sharder Service\nAfter=network.target\n\n"
+                 << "[Service]\nType=simple\nExecStart=" << (target_dir / fs::path(exec_path).filename()).string()
+                 << " " << url << "\nRestart=on-failure\nUser=shard\nWorkingDirectory=" << target_dir.string() << "\n\n"
+                 << "[Install]\nWantedBy=multi-user.target\n";
     service_file.close();
 
     system("systemctl daemon-reload");
@@ -386,25 +342,37 @@ bool setup_systemd_service(const std::string &exec_path, const std::string &url)
 
 int main(int argc, char *argv[])
 {
-    if (argc != 2)
+    bool dry_run = false;
+    bool override_unit = false;
+    std::string url;
+
+    for (int i = 1; i < argc; ++i)
     {
-        std::cerr << "Usage: " << argv[0] << " <url>" << std::endl;
+        if (std::strcmp(argv[i], "--dry") == 0)
+            dry_run = true;
+        else if (std::strcmp(argv[i], "--override") == 0)
+            override_unit = true;
+        else
+            url = argv[i];
+    }
+
+    if (url.empty())
+    {
+        std::cerr << "Usage: " << argv[0] << " [--dry] [--override] <url>" << std::endl;
         return 1;
     }
 
-    if (setup_systemd_service(fs::canonical(argv[0]), argv[1]))
+    if (!dry_run && setup_systemd_service(fs::canonical(argv[0]), url, override_unit))
     {
-        exit(0);
+        return 0;
     }
 
-    std::string url = argv[1];
     std::string host = get_public_ip();
     int port = 12345;
 
     std::thread([&]()
                 {
-        while (true)
-        {
+        while (true) {
             register_shard(url, host, port);
             std::this_thread::sleep_for(std::chrono::seconds(30));
         } })
