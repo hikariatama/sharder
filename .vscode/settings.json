@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "*.sqlbook": "sql",
+        "*.ndjson": "jsonl",
+        "*.dbclient-js": "javascript",
+        ".prettierignore": "ignore",
+        "string": "cpp",
+        "iostream": "cpp"
+    }
+}

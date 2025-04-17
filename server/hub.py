@@ -172,7 +172,7 @@ class SharderHub:
                         self._shards.remove(shard)
                         del self._status[shard]
 
-                time.sleep(3)
+            time.sleep(3)
 
 
 sharder_hub = SharderHub()

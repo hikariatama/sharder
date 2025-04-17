@@ -15,6 +15,8 @@
 #include <atomic>
 #include <chrono>
 #include <curl/curl.h>
+#include <pwd.h>
+#include <sys/types.h>
 
 namespace fs = std::filesystem;
 
@@ -305,8 +307,81 @@ void register_shard(const std::string &url, const std::string &host, int port)
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_str.c_str());
     curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, json_str.size());
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
+
+    std::string response;
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, +[](char *ptr, size_t size, size_t nmemb, std::string *data)
+                                                  {
+        data->append(ptr, size * nmemb);
+        return size * nmemb; });
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+
+    CURLcode res = curl_easy_perform(curl);
+    if (res != CURLE_OK)
+    {
+        std::cerr << "CURL error: " << curl_easy_strerror(res) << std::endl;
+    }
+
     curl_easy_cleanup(curl);
     curl_slist_free_all(headers);
+}
+
+bool setup_systemd_service(const std::string &exec_path, const std::string &url)
+{
+    struct passwd *pw = getpwuid(geteuid());
+    if (pw && std::string(pw->pw_name) == "shard")
+    {
+        return false;
+    }
+
+    std::string service_path = "/etc/systemd/system/shard.service";
+    std::ofstream service_file(service_path);
+    if (!service_file.is_open())
+    {
+        std::cerr << "Failed to create systemd service file. Try running as root." << std::endl;
+        exit(1);
+    }
+
+    if (fs::exists(service_path) && fs::file_size(service_path) > 0)
+    {
+        return false;
+    }
+
+    fs::path target_dir = "/opt/shard";
+    fs::create_directories(target_dir);
+    fs::copy(exec_path, target_dir / fs::path(exec_path).filename(), fs::copy_options::overwrite_existing);
+
+    if (system("id -u shard > /dev/null 2>&1") != 0)
+    {
+        if (system("useradd -r -s /bin/false shard") != 0)
+        {
+            std::cerr << "Failed to create user 'shard'. Please create it manually." << std::endl;
+            exit(1);
+        }
+    }
+
+    system(("chown -R shard " + target_dir.string()).c_str());
+    system(("chmod -R 755 " + target_dir.string()).c_str());
+
+    service_file << "[Unit]\n";
+    service_file << "Description=Sharder Service\n";
+    service_file << "After=network.target\n\n";
+
+    service_file << "[Service]\n";
+    service_file << "Type=simple\n";
+    service_file << "ExecStart=" << (target_dir / fs::path(exec_path).filename()).string() << " " << url << "\n";
+    service_file << "Restart=on-failure\n";
+    service_file << "User=shard\n";
+    service_file << "WorkingDirectory=" << target_dir.string() << "\n\n";
+
+    service_file << "[Install]\n";
+    service_file << "WantedBy=multi-user.target\n";
+    service_file.close();
+
+    system("systemctl daemon-reload");
+    system("systemctl enable --now shard.service");
+
+    std::cout << "Systemd service installed and started." << std::endl;
+    return true;
 }
 
 int main(int argc, char *argv[])
@@ -315,6 +390,11 @@ int main(int argc, char *argv[])
     {
         std::cerr << "Usage: " << argv[0] << " <url>" << std::endl;
         return 1;
+    }
+
+    if (setup_systemd_service(fs::canonical(argv[0]), argv[1]))
+    {
+        exit(0);
     }
 
     std::string url = argv[1];

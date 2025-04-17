@@ -47,8 +47,8 @@ export function DevSettings({ onMatch }: DevSettingsProps) {
       const data = await response.json() as { secret: string };
       if (env.NEXT_PUBLIC_BACKEND_URL.startsWith("/")) {
         const baseUrl = window.location.origin;
-        const secretUrl = new URL(data.secret, baseUrl);
-        setShardUrl(secretUrl.href);
+        const secretUrl = `${baseUrl}/api/connect/${data.secret}`;
+        setShardUrl(secretUrl);
       } else {
         setShardUrl(`${env.NEXT_PUBLIC_BACKEND_URL}/connect/${data.secret}`);
       }
