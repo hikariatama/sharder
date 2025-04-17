@@ -66,15 +66,6 @@ base = {
                 "POSTGRES_PASSWORD": PG_PASSWORD,
             },
         },
-        "shard": {
-            "build": {"context": "./shard"},
-            "volumes": ["shard-storage:/app/data"],
-            "networks": ["shard_net"],
-            "restart": "unless-stopped",
-            "environment": {
-                "SHARDER_BASE": "/app/data",
-            },
-        },
     },
     "volumes": {
         "postgres-storage": {},
