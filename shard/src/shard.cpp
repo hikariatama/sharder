@@ -266,21 +266,23 @@ private:
     }
 };
 
-void persist_config(const std::string &url, const std::string &host, int port)
+std::string get_public_ip()
 {
-    std::ofstream cfg(".shardconfig");
-    cfg << url << "\n" << host << "\n" << port << std::endl;
-}
+    CURL *curl = curl_easy_init();
+    if (!curl)
+        return "127.0.0.1";
 
-bool read_config(std::string &url, std::string &host, int &port)
-{
-    std::ifstream cfg(".shardconfig");
-    if (!cfg)
-        return false;
-    std::getline(cfg, url);
-    std::getline(cfg, host);
-    cfg >> port;
-    return true;
+    std::string ip;
+    curl_easy_setopt(curl, CURLOPT_URL, "https://ident.me");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, +[](char *ptr, size_t size, size_t nmemb, std::string *data)
+                                                  {
+        data->append(ptr, size * nmemb);
+        return size * nmemb; });
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &ip);
+    curl_easy_perform(curl);
+    curl_easy_cleanup(curl);
+
+    return ip.empty() ? "127.0.0.1" : ip;
 }
 
 void register_shard(const std::string &url, const std::string &host, int port)
@@ -289,35 +291,9 @@ void register_shard(const std::string &url, const std::string &host, int port)
     if (!curl)
         return;
 
-    auto escape_json = [](const std::string &input) {
-        std::ostringstream escaped;
-        for (char c : input)
-        {
-            switch (c)
-            {
-            case '\\': escaped << "\\\\"; break;
-            case '"': escaped << "\\\""; break;
-            case '\n': escaped << "\\n"; break;
-            case '\r': escaped << "\\r"; break;
-            case '\t': escaped << "\\t"; break;
-            default:
-                if (static_cast<unsigned char>(c) < 0x20 || static_cast<unsigned char>(c) > 0x7E)
-                {
-                    escaped << "\\u" << std::hex << std::setw(4) << std::setfill('0') << (int)(unsigned char)c;
-                }
-                else
-                {
-                    escaped << c;
-                }
-                break;
-            }
-        }
-        return escaped.str();
-    };
-
     std::ostringstream json;
     json << "{";
-    json << "\"host\":\"" << escape_json(host) << "\",";
+    json << "\"host\":\"" << host << "\",";
     json << "\"port\":" << port << "}";
 
     struct curl_slist *headers = nullptr;
@@ -335,29 +311,24 @@ void register_shard(const std::string &url, const std::string &host, int port)
 
 int main(int argc, char *argv[])
 {
-    std::string url, host;
-    int port;
-
-    if (argc == 4)
+    if (argc != 2)
     {
-        url = argv[1];
-        host = argv[2];
-        port = std::stoi(argv[3]);
-        persist_config(url, host, port);
-    }
-    else if (!read_config(url, host, port))
-    {
-        std::cerr << "Missing arguments and no valid .shardconfig found." << std::endl;
+        std::cerr << "Usage: " << argv[0] << " <url>" << std::endl;
         return 1;
     }
 
-    std::thread([&]() {
+    std::string url = argv[1];
+    std::string host = get_public_ip();
+    int port = 12345;
+
+    std::thread([&]()
+                {
         while (true)
         {
             register_shard(url, host, port);
             std::this_thread::sleep_for(std::chrono::seconds(30));
-        }
-    }).detach();
+        } })
+        .detach();
 
     Shard shard(host, port);
     shard.start();

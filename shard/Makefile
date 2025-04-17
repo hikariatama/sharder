@@ -2,7 +2,12 @@ SRC = src/shard.cpp
 BUILD_DIR = bin
 DATA_DIR = .data
 BIN_NAME = shard
-CXXFLAGS = -O2 -std=c++17 -lcurl
+CXXFLAGS = -O2 -std=c++17
+LDFLAGS = -lcurl
+UNAME_S := $(shell uname -s)
+IS_MACOS := $(findstring Darwin, $(UNAME_S))
+DOCKER_IMAGE = linux-builder
+DOCKER_RUN = docker run --rm -v "$(PWD)":/project -w /project $(DOCKER_IMAGE)
 
 all: build run
 
@@ -21,16 +26,34 @@ cross:
 	$(MAKE) linux_arm64
 
 macos_x86_64:
-	clang++ $(CXXFLAGS) -arch x86_64 $(SRC) -o $(BUILD_DIR)/$(BIN_NAME)-macos-x86_64
+	clang++ $(CXXFLAGS) -arch x86_64 $(SRC) -o $(BUILD_DIR)/$(BIN_NAME)-macos-x86_64 $(LDFLAGS)
 
 macos_arm64:
-	clang++ $(CXXFLAGS) -arch arm64 $(SRC) -o $(BUILD_DIR)/$(BIN_NAME)-macos-arm64
+	clang++ $(CXXFLAGS) -arch arm64 $(SRC) -o $(BUILD_DIR)/$(BIN_NAME)-macos-arm64 $(LDFLAGS)
 
 linux_x86_64:
-	x86_64-unknown-linux-gnu-g++ $(CXXFLAGS) -pthread $(SRC) -o $(BUILD_DIR)/$(BIN_NAME)-linux-x86_64
+ifeq ($(IS_MACOS),Darwin)
+	@echo "Building linux_x86_64 in Docker..."
+	@docker build -f Dockerfile.buildenv -t $(DOCKER_IMAGE) .
+	@$(DOCKER_RUN) make linux_x86_64_internal
+else
+	$(MAKE) linux_x86_64_internal
+endif
 
 linux_arm64:
-	aarch64-unknown-linux-gnu-g++ $(CXXFLAGS) -pthread $(SRC) -o $(BUILD_DIR)/$(BIN_NAME)-linux-arm64
+ifeq ($(IS_MACOS),Darwin)
+	@echo "Building linux_arm64 in Docker..."
+	@docker build -f Dockerfile.buildenv -t $(DOCKER_IMAGE) .
+	@$(DOCKER_RUN) make linux_arm64_internal
+else
+	$(MAKE) linux_arm64_internal
+endif
+
+linux_x86_64_internal:
+	g++ $(CXXFLAGS) -pthread $(SRC) -o $(BUILD_DIR)/$(BIN_NAME)-linux-x86_64 $(LDFLAGS)
+
+linux_arm64_internal:
+	g++ $(CXXFLAGS) -pthread $(SRC) -o $(BUILD_DIR)/$(BIN_NAME)-linux-arm64 $(LDFLAGS)
 
 clean:
 	rm -r $(BUILD_DIR) || true

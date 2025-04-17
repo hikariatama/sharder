@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 CONNECTION_SECRET = base64.b64encode(
     bytes.fromhex(os.environ["CONNECTION_SECRET"])
-).decode()
+).decode().strip("=")
 
 
 @asynccontextmanager
@@ -165,7 +165,7 @@ class ConnectionInfo(BaseModel):
     port: int
 
 
-@app.post("/api/connect/<connection_secret>")
+@app.post("/api/connect/{connection_secret}")
 async def connect(data: ConnectionInfo, connection_secret: str):
     if connection_secret != CONNECTION_SECRET:
         raise HTTPException(status_code=401, detail="Invalid connection secret")
