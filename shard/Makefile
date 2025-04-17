@@ -21,10 +21,10 @@ cross:
 	$(MAKE) linux_arm64
 
 macos_x86_64:
-	clang++ $(CXXFLAGS) -arch x86_64 $(SRC) -o $(BUILD_DIR)/$(BIN_NAME)-macos-x86_64 $(LDFLAGS)
+	g++ $(CXXFLAGS) -arch x86_64 $(SRC) -o $(BUILD_DIR)/$(BIN_NAME)-macos-x86_64 $(LDFLAGS)
 
 macos_arm64:
-	clang++ $(CXXFLAGS) -arch arm64 $(SRC) -o $(BUILD_DIR)/$(BIN_NAME)-macos-arm64 $(LDFLAGS)
+	g++ $(CXXFLAGS) -arch arm64 $(SRC) -o $(BUILD_DIR)/$(BIN_NAME)-macos-arm64 $(LDFLAGS)
 
 linux_x86_64:
 ifeq ($(IS_MACOS),Darwin)
