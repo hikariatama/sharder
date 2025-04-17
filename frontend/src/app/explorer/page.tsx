@@ -2,11 +2,13 @@
 
 import { useFileEventContext } from "@/app/context/FileEventContext";
 import { env } from "@/env";
-import { formatSize } from "@/utils";
+import { formatSize, getSalsa } from "@/utils";
 import { common, createStarryNight } from '@wooorm/starry-night';
+import fileTypeChecker from "file-type-checker";
 import { motion } from "framer-motion";
 import { toHtml } from 'hast-util-to-html';
 import { ArrowLeft, Download, FileText, Link, LoaderCircle, Trash2 } from "lucide-react";
+import mimeTypes from "mime-types";
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from "react";
 import { twMerge } from "tailwind-merge";
@@ -70,43 +72,68 @@ export default function FileExplorerPage() {
 
     setIsFileContentLoading(true);
     setIsFileContentError(false);
+
     try {
       const response = await fetch(
         `${env.NEXT_PUBLIC_BACKEND_URL}/files/${fileId}`,
         { signal: controller.signal }
       );
-      if (response.ok) {
-        const data = await response.blob();
-        const reader = new FileReader();
-        reader.onload = async () => {
+
+      if (!response.ok) {
+        setIsFileContentError(true);
+        return;
+      }
+
+      const data = await response.blob();
+      const reader = new FileReader();
+
+      reader.onload = async () => {
+        try {
+          const salsa = await getSalsa(window.localStorage.getItem("seed") ?? "");
+          const buffer = reader.result as ArrayBuffer;
+          const uint8Array = new Uint8Array(buffer);
+          const decryptedFile = salsa.decrypt(uint8Array);
+
+          const detected = fileTypeChecker.detectFile(decryptedFile);
+          const mime = detected?.mimeType ?? mimeTypes.lookup(filename) ?? null;
+          const isText = mime && (mime.startsWith("text/") || mime === "application/json");
+
           if (fetchControllerRef.current !== controller) return;
-          const content = reader.result;
-          if (typeof content === "string") {
+
+          if (isText || !mime) {
+            const content = new TextDecoder("utf-8").decode(decryptedFile);
             const starryNight = await createStarryNight(common);
             let scope = starryNight.flagToScope(filename);
             scope ??= "plaintext";
-            const html = toHtml(starryNight.highlight(content, scope));
-            console.log("HTML content:", html);
-            setFileContent(html.replaceAll("\n", "<br />"));
-            setMimeType("code");
+
+            if (scope === "plaintext") {
+              setFileContent(content);
+              setMimeType("text/plain");
+            } else {
+              const html = toHtml(starryNight.highlight(content, scope));
+              setFileContent(html.replaceAll("\n", "<br />"));
+              setMimeType("code");
+            }
           } else {
-            setFileContent(content);
+            setFileContent(decryptedFile.buffer);
+            setMimeType(mime);
           }
-        };
-        const mimeType = data.type;
-        setMimeType(mimeType);
-        if (mimeType.startsWith("text/")) {
-          reader.readAsText(data);
-        } else {
-          reader.readAsArrayBuffer(data);
+
+        } catch (err) {
+          console.error("Decryption or processing failed:", err);
+          setIsFileContentError(true);
         }
-      } else {
+      };
+
+      reader.onerror = (error) => {
+        console.error("Error reading file blob:", error);
         setIsFileContentError(true);
-      }
+      };
+
+      reader.readAsArrayBuffer(data);
+
     } catch (error) {
-      if ((error as DOMException).name === "AbortError") {
-        return;
-      }
+      if ((error as DOMException).name === "AbortError") return;
       console.error("Error fetching file content:", error);
       setIsFileContentError(true);
     } finally {
@@ -115,6 +142,7 @@ export default function FileExplorerPage() {
       }
     }
   }, []);
+
 
   const handleFileClick = (file: File) => {
     if (file.id === selectedFile?.id) return;

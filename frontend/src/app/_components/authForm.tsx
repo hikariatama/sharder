@@ -11,6 +11,7 @@ import { useAuthContext } from "../context/AuthContext";
 export default function AuthForm() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [seed, setSeed] = useState("");
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const { recheckAuth } = useAuthContext();
@@ -28,6 +29,7 @@ export default function AuthForm() {
 
     if (res.ok) {
       await recheckAuth()
+      window.localStorage.setItem("seed", seed);
       router.push("/");
     } else {
       setError("Invalid username or password");
@@ -53,6 +55,13 @@ export default function AuthForm() {
             className="p-2 text-white border-b-white border-b text-center tracking-wide outline-none h-10"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+          />
+          <input
+            type="password"
+            placeholder="Seed"
+            className="p-2 text-white border-b-white border-b text-center tracking-wide outline-none h-10"
+            value={seed}
+            onChange={(e) => setSeed(e.target.value)}
           />
         </div>
 

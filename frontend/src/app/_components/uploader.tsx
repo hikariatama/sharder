@@ -5,6 +5,7 @@ import { env } from "@/env";
 import { motion } from "framer-motion";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { twMerge } from "tailwind-merge";
+import { getSalsa } from "@/utils";
 
 export const Upload = forwardRef<
   { isUploading: boolean; isDrag: boolean; inputRef: HTMLInputElement | null },
@@ -23,14 +24,29 @@ export const Upload = forwardRef<
     inputRef: fileInputRef.current ?? document.createElement("input"),
   }));
 
-  const handleSubmit = (files: FileList) => {
+  const handleSubmit = async (files: FileList) => {
     setIsUploading(true);
 
-    const uploadPromises = Array.from(files).map((file) => {
-      const formData = new FormData();
-      formData.append("file", file);
+    const salsa = await getSalsa(window.localStorage.getItem("seed") ?? "");
 
-      return fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/upload`, {
+    const uploadPromises = Array.from(files).map(async (file) => {
+      const formData = new FormData();
+      const reader = new FileReader();
+      reader.readAsArrayBuffer(file);
+      reader.onload = async () => {
+        const buffer = reader.result as ArrayBuffer;
+        const uint8Array = new Uint8Array(buffer);
+        const encryptedFile = salsa.encrypt(uint8Array);
+        formData.append("file", new Blob([encryptedFile]), file.name);
+      };
+
+      await new Promise<void>((resolve) => {
+        reader.onloadend = () => {
+          resolve();
+        };
+      })
+
+      await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/upload`, {
         method: "POST",
         body: formData,
       })
@@ -57,7 +73,7 @@ export const Upload = forwardRef<
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      handleSubmit(e.target.files);
+      void handleSubmit(e.target.files);
     }
   };
 
@@ -67,7 +83,7 @@ export const Upload = forwardRef<
     setIsDrop(true);
     if (e.dataTransfer.files) {
       setFileCount(Array.from(e.dataTransfer.files).length);
-      handleSubmit(e.dataTransfer.files);
+      void handleSubmit(e.dataTransfer.files);
     }
   };
 
