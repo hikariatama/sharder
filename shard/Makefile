@@ -9,14 +9,9 @@ IS_MACOS := $(findstring Darwin, $(UNAME_S))
 DOCKER_IMAGE = linux-builder
 DOCKER_RUN = docker run --rm -v "$(PWD)":/project -w /project $(DOCKER_IMAGE)
 
-all: build run
-
 build:
 	mkdir -p $(BUILD_DIR)
-	g++ $(CXXFLAGS) $(SRC) -o $(BUILD_DIR)/$(BIN_NAME)
-
-run:
-	./$(BUILD_DIR)/$(BIN_NAME)
+	g++ $(CXXFLAGS) $(SRC) -o $(BUILD_DIR)/$(BIN_NAME) $(LDFLAGS)
 
 cross: 
 	mkdir -p $(BUILD_DIR)

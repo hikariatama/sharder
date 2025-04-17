@@ -295,16 +295,36 @@ void register_shard(const std::string &url, const std::string &host, int port)
     json << "{";
     json << "\"host\":\"" << host << "\",";
     json << "\"port\":" << port << "}";
+    std::string json_str = json.str();
+
+    std::cout << "Sending JSON: " << json_str << std::endl;
 
     struct curl_slist *headers = nullptr;
     headers = curl_slist_append(headers, "Content-Type: application/json");
 
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json.str().c_str());
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, json.str().length());
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_str.c_str());
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, json_str.size());
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
-    curl_easy_perform(curl);
+
+    std::string response;
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, +[](char *ptr, size_t size, size_t nmemb, std::string *data)
+                                                  {
+        data->append(ptr, size * nmemb);
+        return size * nmemb; });
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+
+    CURLcode res = curl_easy_perform(curl);
+    if (res != CURLE_OK)
+    {
+        std::cerr << "CURL error: " << curl_easy_strerror(res) << std::endl;
+    }
+    else
+    {
+        std::cout << "Response: " << response << std::endl;
+    }
+
     curl_easy_cleanup(curl);
     curl_slist_free_all(headers);
 }
