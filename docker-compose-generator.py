@@ -5,8 +5,8 @@ import argparse
 parser = argparse.ArgumentParser(description="Generate a docker-compose.yml file.")
 parser.add_argument(
     "--shards",
-    type=list,
-    help="List of shards. Each shard should be in the format 'host:port'.",
+    type=str,
+    help="Comma-separated list of shards. Each shard should be in the format 'host:port'.",
 )
 parser.add_argument(
     "--chunks-per-file",
@@ -28,7 +28,7 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-shards: list = args.shards
+shards = args.shards.split(",")
 
 PG_PASSWORD = os.urandom(16).hex()
 
