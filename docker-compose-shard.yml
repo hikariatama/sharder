@@ -8,5 +8,7 @@ services:
     restart: unless-stopped
     volumes:
     - shard-storage:/app/data
+    ports:
+    - 12345:12345
 volumes:
   shard-storage: {}
