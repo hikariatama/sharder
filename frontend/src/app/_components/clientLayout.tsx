@@ -7,6 +7,7 @@ import { env } from "@/env";
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useRef } from "react";
 import ShardHealthcheck from "./shardHealthcheck";
+import { DevSettings } from "./dev";
 
 
 export default function ClientLayout() {
@@ -64,6 +65,7 @@ export default function ClientLayout() {
       )}
       <Navbar handleUpload={handleUpload} />
       <Upload ref={uploadRef} />
+      <DevSettings />
     </>
   );
 }

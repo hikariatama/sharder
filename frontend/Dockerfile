@@ -10,7 +10,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NODE_ENV=production
-ENV NEXT_PUBLIC_BACKEND_URL="/api"
+ENV NEXT_PUBLIC_BACKEND_URL="https://sharder.dgazizullin.dev/api"
 RUN bun run build
 
 FROM oven/bun:1 AS runner

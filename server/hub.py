@@ -11,7 +11,6 @@ from pydantic import BaseModel
 CHUNKS_PER_FILE = int(os.environ.get("CHUNKS_PER_FILE", 3))
 REPLICAS = int(os.environ.get("REPLICAS", 2))
 HMAC_SECRET = bytes.fromhex(os.environ.get("HMAC_SECRET", "secret"))
-SHARDS = [os.environ[param] for param in os.environ if param.startswith("SHARD_")]
 
 
 class ShardStatus(BaseModel):
@@ -22,8 +21,19 @@ class ShardStatus(BaseModel):
 
 class SharderHub:
     def __init__(self):
-        self._shards = SHARDS
+        self._shards = []
         self._status: dict[str, ShardStatus] = {}
+
+    def add_shard(self, host: str, port: int):
+        shard = f"{host}:{port}"
+        if shard not in self._shards:
+            self._shards.append(shard)
+            self._status[shard] = ShardStatus(
+                shard=shard,
+                healthy=False,
+                size=0,
+            )
+            logging.info(f"Added shard {shard}")
 
     @property
     def status(self) -> list[dict]:

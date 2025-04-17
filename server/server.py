@@ -1,10 +1,12 @@
 import asyncio
+import base64
 import datetime
 import json
 import logging
 from contextlib import asynccontextmanager
 from threading import Thread
 from typing import Annotated
+import os
 
 import bcrypt
 import magic
@@ -34,6 +36,10 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+CONNECTION_SECRET = base64.b64encode(
+    bytes.fromhex(os.environ["CONNECTION_SECRET"])
+).decode()
 
 
 @asynccontextmanager
@@ -142,6 +148,30 @@ async def me(user: Annotated[UserAuth, Depends(use_auth)]):
             raise HTTPException(status_code=401, detail="Invalid token")
 
         return {"id": user.id, "username": user.username}
+
+
+@app.get("/api/secret")
+async def secret(user: Annotated[UserAuth, Depends(use_auth)]):
+    with SessionLocal() as db:
+        user = db.query(UserModel).filter(UserModel.id == user.id).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid token")
+
+        return {"secret": CONNECTION_SECRET}
+
+
+class ConnectionInfo(BaseModel):
+    host: str
+    port: int
+
+
+@app.post("/api/connect/<connection_secret>")
+async def connect(data: ConnectionInfo, connection_secret: str):
+    if connection_secret != CONNECTION_SECRET:
+        raise HTTPException(status_code=401, detail="Invalid connection secret")
+
+    sharder_hub.add_shard(data.host, data.port)
+    return {"ok": True}
 
 
 @app.post("/api/upload")

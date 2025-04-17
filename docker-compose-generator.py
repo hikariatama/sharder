@@ -50,6 +50,7 @@ base = {
                 "CHUNKS_PER_FILE": args.chunks_per_file,
                 "REPLICAS": args.replicas,
                 "HMAC_SECRET": os.urandom(16).hex(),
+                "CONNECTION_SECRET": os.urandom(16).hex(),
                 "DB_URL": f"postgresql://shard:{PG_PASSWORD}@postgres/shard",
                 **{f"SHARD_{i + 1}": shard for i, shard in enumerate(shards)},
             },
