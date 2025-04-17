@@ -17,6 +17,7 @@ class ShardStatus(BaseModel):
     shard: str
     healthy: bool
     size: int
+    last_heartbeat: float = 0
 
 
 class SharderHub:
@@ -144,7 +145,7 @@ class SharderHub:
 
     def healthcheck(self):
         while True:
-            for shard in self._shards:
+            for shard in list(self._shards):
                 host, port = shard.split(":")
                 try:
                     with socket.create_connection((host, int(port)), timeout=5) as sock:
@@ -157,16 +158,21 @@ class SharderHub:
                             shard=shard,
                             healthy=True,
                             size=size,
+                            last_heartbeat=time.time(),
                         )
                 except Exception as e:
                     logging.error(f"Failed to check health of shard {shard}: {e}")
-                    self._status[shard] = ShardStatus(
-                        shard=shard,
-                        healthy=False,
-                        size=0,
-                    )
+                    if shard in self._status:
+                        self._status[shard].healthy = False
 
-            time.sleep(3)
+                    if time.time() - self._status[shard].last_heartbeat > 300:
+                        logging.warning(
+                            f"Removing shard {shard} due to prolonged offline status"
+                        )
+                        self._shards.remove(shard)
+                        del self._status[shard]
+
+                time.sleep(3)
 
 
 sharder_hub = SharderHub()
