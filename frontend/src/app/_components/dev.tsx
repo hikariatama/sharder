@@ -45,7 +45,13 @@ export function DevSettings({ onMatch }: DevSettingsProps) {
     setIsLoading(false);
     if (response.ok) {
       const data = await response.json() as { secret: string };
-      setShardUrl(`${env.NEXT_PUBLIC_BACKEND_URL}/connect/${data.secret}`);
+      if (env.NEXT_PUBLIC_BACKEND_URL.startsWith("/")) {
+        const baseUrl = window.location.origin;
+        const secretUrl = new URL(data.secret, baseUrl);
+        setShardUrl(secretUrl.href);
+      } else {
+        setShardUrl(`${env.NEXT_PUBLIC_BACKEND_URL}/connect/${data.secret}`);
+      }
     } else {
       console.error("Failed to fetch shard URL");
     }
@@ -61,10 +67,10 @@ export function DevSettings({ onMatch }: DevSettingsProps) {
             <div
               className="select-none font-mono cursor-pointer hover:bg-blue-50 active:bg-blue-100 transition-colors ease-in-out duration-75 px-2 py-1 rounded-sm"
               onClick={() => {
-                void navigator.clipboard.writeText(`./shard ${shardUrl} <host> 12345`);
+                void navigator.clipboard.writeText(`./shard ${shardUrl}`);
               }}
             >
-              ./shard {shardUrl} &lt;host&gt; 12345
+              ./shard {shardUrl}
             </div>
           </div>
           : (
