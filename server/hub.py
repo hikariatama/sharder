@@ -11,7 +11,7 @@ from pydantic import BaseModel
 CHUNKS_PER_FILE = int(os.environ.get("CHUNKS_PER_FILE", 3))
 REPLICAS = int(os.environ.get("REPLICAS", 2))
 HMAC_SECRET = bytes.fromhex(os.environ.get("HMAC_SECRET", "secret"))
-SHARDS = int(os.environ["SHARDS"])
+SHARDS = [os.environ[param] for param in os.environ if param.startswith("SHARD_")]
 
 
 class ShardStatus(BaseModel):
@@ -21,8 +21,8 @@ class ShardStatus(BaseModel):
 
 
 class SharderHub:
-    def __init__(self, shards: list[str] | None = None):
-        self._shards = shards or [f"shard-{i+1}:12345" for i in range(SHARDS)]
+    def __init__(self):
+        self._shards = SHARDS
         self._status: dict[str, ShardStatus] = {}
 
     @property

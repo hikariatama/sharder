@@ -5,8 +5,8 @@ import argparse
 parser = argparse.ArgumentParser(description="Generate a docker-compose.yml file.")
 parser.add_argument(
     "--shards",
-    type=int,
-    help="Number of shards to include in the configuration. These are the nodes that store files.",
+    type=list,
+    help="List of shards. Each shard should be in the format 'host:port'.",
 )
 parser.add_argument(
     "--chunks-per-file",
@@ -28,7 +28,7 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-shards = args.shards
+shards: list = args.shards
 
 PG_PASSWORD = os.urandom(16).hex()
 
@@ -43,15 +43,15 @@ base = {
         "server": {
             "build": {"context": "./server"},
             "container_name": "sharder-server",
-            "depends_on": [f"shard-{i + 1}" for i in range(shards)] + ["postgres"],
+            "depends_on": ["postgres"],
             "networks": ["shard_net"],
             "restart": "unless-stopped",
             "environment": {
-                "SHARDS": shards,
                 "CHUNKS_PER_FILE": args.chunks_per_file,
                 "REPLICAS": args.replicas,
                 "HMAC_SECRET": os.urandom(16).hex(),
                 "DB_URL": f"postgresql://shard:{PG_PASSWORD}@postgres/shard",
+                **{f"SHARD_{i + 1}": shard for i, shard in enumerate(shards)},
             },
         },
         "nginx": {
@@ -66,33 +66,29 @@ base = {
             "image": "postgres:latest",
             "networks": ["shard_net"],
             "restart": "unless-stopped",
-            "volumes": ["postgres_data:/var/lib/postgresql/data"],
+            "volumes": ["postgres-storage:/var/lib/postgresql/data"],
             "environment": {
                 "POSTGRES_DB": "shard",
                 "POSTGRES_USER": "shard",
                 "POSTGRES_PASSWORD": PG_PASSWORD,
             },
         },
+        "shard": {
+            "build": {"context": "./shard"},
+            "volumes": ["shard-storage:/app/data"],
+            "networks": ["shard_net"],
+            "restart": "unless-stopped",
+            "environment": {
+                "SHARDER_BASE": "/app/data",
+            },
+        },
     },
     "volumes": {
-        "postgres_data": {},
+        "postgres-storage": {},
+        "shard-storage": {},
     },
     "networks": {"shard_net": {}},
 }
-
-for i in range(shards):
-    name = f"shard-{i + 1}"
-    vol = f"{name}-storage"
-    base["services"][name] = {
-        "build": {"context": "./shard"},
-        "volumes": [f"{vol}:/app/data"],
-        "networks": ["shard_net"],
-        "restart": "unless-stopped",
-        "environment": {
-            "SHARDER_BASE": "/app/data",
-        },
-    }
-    base["volumes"][vol] = {}
 
 if (
     os.path.exists("docker-compose.yml")
