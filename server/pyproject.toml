@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "sharder-server"
+version = "0.1.0"
+description = "A decentralized file storage solution"
+authors = ["Daniil Gazizullin <d.gazizullin@innopolis.university>"]
+license = "MIT"
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.115.12"
+uvicorn = {extras = ["standard"], version = "^0.34.0"}
+python-multipart = "^0.0.20"
+sqlalchemy = "^2.0.40"
+python-ulid = "^3.0.0"
+psycopg2-binary = "^2.9.10"
+python-magic = "^0.4.27"
+bcrypt = "^4.3.0"
+
+[tool.isort]
+known_local_folder = ["db", "auth", "hub"]
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
