@@ -11,17 +11,17 @@ RUN apk update && apk add --no-cache \
     automake \
     libtool \
     pkgconfig \
-    git
+    git \
+    cmake
 
 WORKDIR /tmp/shard
 COPY . .
-RUN make
+RUN make deps && make
 
 RUN mkdir -p /opt/shard
 RUN cp /tmp/shard/bin/shard /opt/shard/
 WORKDIR /opt/shard
 
-ARG SHARD_TOKEN
 EXPOSE 12345
 
-CMD export SHARD_PUBLIC_IP=$(hostname -i) && ./shard "https://sharder.dgazizullin.dev/api/connect/$SHARD_TOKEN" --dry
+CMD echo "This command should be overriden by the docker-compose file"

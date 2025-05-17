@@ -1,0 +1,257 @@
+{
+    "id": null,
+    "uid": "fastapi-service",
+    "title": "Sharder FastAPI Service",
+    "schemaVersion": 27,
+    "version": 1,
+    "refresh": "15s",
+    "panels": [
+        {
+            "id": 1,
+            "type": "graph",
+            "title": "HTTP Request Rate (rps)",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 0
+            },
+            "targets": [
+                {
+                    "expr": "sum(rate(http_requests_total[1m])) by (handler, status)",
+                    "legendFormat": "{{handler}} {{status}}"
+                }
+            ]
+        },
+        {
+            "id": 2,
+            "type": "graph",
+            "title": "Error Rate (%)",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 0
+            },
+            "targets": [
+                {
+                    "expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m])) * 100",
+                    "legendFormat": "5xx errors"
+                }
+            ],
+            "yaxes": [
+                {
+                    "format": "percent",
+                    "min": 0,
+                    "max": 100
+                },
+                {
+                    "show": false
+                }
+            ]
+        },
+        {
+            "id": 3,
+            "type": "graph",
+            "title": "Request Latency (p50/p90/p99)",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 8
+            },
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_highr_seconds_bucket[5m])) by (le))",
+                    "legendFormat": "p50"
+                },
+                {
+                    "expr": "histogram_quantile(0.90, sum(rate(http_request_duration_highr_seconds_bucket[5m])) by (le))",
+                    "legendFormat": "p90"
+                },
+                {
+                    "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_highr_seconds_bucket[5m])) by (le))",
+                    "legendFormat": "p99"
+                }
+            ],
+            "yaxes": [
+                {
+                    "format": "s",
+                    "min": null,
+                    "max": null
+                },
+                {
+                    "show": false
+                }
+            ]
+        },
+        {
+            "id": 4,
+            "type": "stat",
+            "title": "Active Uploads",
+            "gridPos": {
+                "h": 4,
+                "w": 6,
+                "x": 12,
+                "y": 8
+            },
+            "targets": [
+                {
+                    "expr": "sharder_active_uploads"
+                }
+            ]
+        },
+        {
+            "id": 5,
+            "type": "stat",
+            "title": "Total Uploads",
+            "gridPos": {
+                "h": 4,
+                "w": 6,
+                "x": 18,
+                "y": 8
+            },
+            "targets": [
+                {
+                    "expr": "sharder_total_uploads_count"
+                }
+            ]
+        },
+        {
+            "id": 6,
+            "type": "graph",
+            "title": "GC Collections by Generation",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 16
+            },
+            "targets": [
+                {
+                    "expr": "python_gc_collections_total{generation=\"0\"}",
+                    "legendFormat": "gen0"
+                },
+                {
+                    "expr": "python_gc_collections_total{generation=\"1\"}",
+                    "legendFormat": "gen1"
+                },
+                {
+                    "expr": "python_gc_collections_total{generation=\"2\"}",
+                    "legendFormat": "gen2"
+                }
+            ],
+            "yaxes": [
+                {
+                    "format": "short",
+                    "min": 0
+                },
+                {
+                    "show": false
+                }
+            ]
+        },
+        {
+            "id": 7,
+            "type": "graph",
+            "title": "GC Objects Collected",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 16
+            },
+            "targets": [
+                {
+                    "expr": "python_gc_objects_collected_total{generation=\"0\"}",
+                    "legendFormat": "gen0"
+                },
+                {
+                    "expr": "python_gc_objects_uncollectable_total{generation=\"0\"}",
+                    "legendFormat": "uncollectable0"
+                }
+            ],
+            "yaxes": [
+                {
+                    "format": "short",
+                    "min": 0
+                },
+                {
+                    "show": false
+                }
+            ]
+        },
+        {
+            "id": 8,
+            "type": "graph",
+            "title": "Memory Usage",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 24
+            },
+            "targets": [
+                {
+                    "expr": "process_resident_memory_bytes",
+                    "legendFormat": "Resident"
+                },
+                {
+                    "expr": "process_virtual_memory_bytes",
+                    "legendFormat": "Virtual"
+                }
+            ],
+            "yaxes": [
+                {
+                    "format": "bytes",
+                    "min": 0
+                },
+                {
+                    "show": false
+                }
+            ]
+        },
+        {
+            "id": 9,
+            "type": "graph",
+            "title": "CPU Time (total seconds)",
+            "gridPos": {
+                "h": 4,
+                "w": 6,
+                "x": 12,
+                "y": 24
+            },
+            "targets": [
+                {
+                    "expr": "process_cpu_seconds_total",
+                    "legendFormat": "CPU sec"
+                }
+            ],
+            "yaxes": [
+                {
+                    "format": "s",
+                    "min": 0
+                },
+                {
+                    "show": false
+                }
+            ]
+        },
+        {
+            "id": 10,
+            "type": "stat",
+            "title": "Open FDs",
+            "gridPos": {
+                "h": 4,
+                "w": 6,
+                "x": 18,
+                "y": 24
+            },
+            "targets": [
+                {
+                    "expr": "process_open_fds"
+                }
+            ]
+        }
+    ]
+}

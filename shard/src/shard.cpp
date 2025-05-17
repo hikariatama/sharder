@@ -17,8 +17,51 @@
 #include <curl/curl.h>
 #include <pwd.h>
 #include <sys/types.h>
+#include <prometheus/exposer.h>
+#include <prometheus/registry.h>
+#include <prometheus/counter.h>
+#include <prometheus/gauge.h>
 
 namespace fs = std::filesystem;
+
+static prometheus::Exposer exposer{"0.0.0.0:9100"};
+static auto registry = std::make_shared<prometheus::Registry>();
+
+static prometheus::Gauge &gauge_total_size = prometheus::BuildGauge()
+                                                 .Name("sharder_current_size_bytes")
+                                                 .Help("Total bytes stored on this shard")
+                                                 .Register(*registry)
+                                                 .Add({});
+
+static prometheus::Gauge &gauge_chunk_count = prometheus::BuildGauge()
+                                                  .Name("sharder_stored_chunks")
+                                                  .Help("Number of chunk files stored")
+                                                  .Register(*registry)
+                                                  .Add({});
+
+static prometheus::Counter &counter_stores = prometheus::BuildCounter()
+                                                 .Name("sharder_store_requests_total")
+                                                 .Help("Total STORE ops received")
+                                                 .Register(*registry)
+                                                 .Add({});
+
+static prometheus::Counter &counter_retrieves = prometheus::BuildCounter()
+                                                    .Name("sharder_retrieve_requests_total")
+                                                    .Help("Total RETRIEVE ops received")
+                                                    .Register(*registry)
+                                                    .Add({});
+
+static prometheus::Counter &counter_deletes = prometheus::BuildCounter()
+                                                  .Name("sharder_delete_requests_total")
+                                                  .Help("Total DELETE ops received")
+                                                  .Register(*registry)
+                                                  .Add({});
+
+static prometheus::Gauge &gauge_active_uploads = prometheus::BuildGauge()
+                                                     .Name("sharder_active_uploads")
+                                                     .Help("Currently in-flight STORE ops")
+                                                     .Register(*registry)
+                                                     .Add({});
 
 class FileSystem
 {
@@ -55,6 +98,15 @@ public:
         }
     }
 
+    size_t chunk_count()
+    {
+        size_t count = 0;
+        for (auto &p : fs::recursive_directory_iterator(base))
+            if (fs::is_regular_file(p))
+                ++count;
+        return count;
+    }
+
     void save(const std::string &hmac, const std::vector<uint8_t> &chunk, uint32_t chunk_index)
     {
         fs::path dir = base / hmac.substr(0, 2) / hmac.substr(2, 2) / hmac;
@@ -83,6 +135,7 @@ public:
 
     bool destroy(const std::string &hmac)
     {
+        counter_deletes.Increment();
         fs::path dir = base / hmac.substr(0, 2) / hmac.substr(2, 2) / hmac;
         if (!fs::exists(dir))
             return false;
@@ -139,6 +192,7 @@ public:
 
     void start()
     {
+        exposer.RegisterCollectable(registry);
         running = true;
         std::cout << "Shard server started." << std::endl;
 
@@ -211,6 +265,8 @@ private:
 
     void handle_store(int fd, uint8_t *header)
     {
+        counter_stores.Increment();
+        gauge_active_uploads.Increment();
         uint32_t index = ntohl(*reinterpret_cast<uint32_t *>(&header[1]));
         uint16_t hmac_len = ntohs(*reinterpret_cast<uint16_t *>(&header[5]));
         uint32_t data_len = ntohl(*reinterpret_cast<uint32_t *>(&header[7]));
@@ -230,7 +286,8 @@ private:
         if (received == data_len)
         {
             std::string hex_hmac;
-            for (char c : hmac) {
+            for (char c : hmac)
+            {
                 char buf[3];
                 snprintf(buf, sizeof(buf), "%02x", static_cast<unsigned char>(c));
                 hex_hmac += buf;
@@ -242,15 +299,20 @@ private:
         {
             send(fd, "\x00", 1, 0);
         }
+        gauge_total_size.Set(disk.size());
+        gauge_chunk_count.Set(disk.chunk_count());
+        gauge_active_uploads.Decrement();
     }
 
     void handle_retrieve(int fd, uint8_t *header)
     {
+        counter_retrieves.Increment();
         uint32_t index = ntohl(*reinterpret_cast<uint32_t *>(&header[1]));
         uint16_t hmac_len = ntohs(*reinterpret_cast<uint16_t *>(&header[5]));
         std::string hmac(reinterpret_cast<char *>(&header[7]), hmac_len);
         std::string hex_hmac;
-        for (char c : hmac) {
+        for (char c : hmac)
+        {
             char buf[3];
             snprintf(buf, sizeof(buf), "%02x", static_cast<unsigned char>(c));
             hex_hmac += buf;
@@ -278,7 +340,8 @@ private:
         uint16_t hmac_len = ntohs(*reinterpret_cast<uint16_t *>(&header[1]));
         std::string hmac(reinterpret_cast<char *>(&header[3]), hmac_len);
         std::string hex_hmac;
-        for (char c : hmac) {
+        for (char c : hmac)
+        {
             char buf[3];
             snprintf(buf, sizeof(buf), "%02x", static_cast<unsigned char>(c));
             hex_hmac += buf;
@@ -336,7 +399,23 @@ void register_shard(const std::string &url, const std::string &host, int port)
     curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, json_str.size());
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
 
-    curl_easy_perform(curl);
+    std::string response;
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, +[](char *ptr, size_t size, size_t nmemb, std::string *data)
+                                                  {
+        data->append(ptr, size * nmemb);
+        return size * nmemb; });
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+
+    auto res = curl_easy_perform(curl);
+    if (res != CURLE_OK)
+    {
+        std::cerr << "Failed to register shard: " << curl_easy_strerror(res) << std::endl;
+    }
+    else
+    {
+        std::cout << "Shard registration response: " << response << std::endl;
+    }
+
     curl_easy_cleanup(curl);
     curl_slist_free_all(headers);
 }
@@ -417,6 +496,7 @@ int main(int argc, char *argv[])
         } })
         .detach();
 
+    exposer.RegisterCollectable(registry);
     Shard shard("0.0.0.0", port);
     shard.start();
     return 0;

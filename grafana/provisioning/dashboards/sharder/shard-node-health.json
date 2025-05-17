@@ -1,0 +1,170 @@
+{
+    "id": null,
+    "uid": "shard-service",
+    "title": "Sharder Shard Service",
+    "schemaVersion": 27,
+    "version": 1,
+    "refresh": "15s",
+    "panels": [
+        {
+            "id": 1,
+            "type": "stat",
+            "title": "Total STORE Ops",
+            "gridPos": {
+                "h": 4,
+                "w": 4,
+                "x": 0,
+                "y": 0
+            },
+            "targets": [
+                {
+                    "expr": "sharder_store_requests_total"
+                }
+            ]
+        },
+        {
+            "id": 2,
+            "type": "stat",
+            "title": "Total RETRIEVE Ops",
+            "gridPos": {
+                "h": 4,
+                "w": 4,
+                "x": 4,
+                "y": 0
+            },
+            "targets": [
+                {
+                    "expr": "sharder_retrieve_requests_total"
+                }
+            ]
+        },
+        {
+            "id": 3,
+            "type": "stat",
+            "title": "Total DELETE Ops",
+            "gridPos": {
+                "h": 4,
+                "w": 4,
+                "x": 8,
+                "y": 0
+            },
+            "targets": [
+                {
+                    "expr": "sharder_delete_requests_total"
+                }
+            ]
+        },
+        {
+            "id": 4,
+            "type": "graph",
+            "title": "Current Size & Chunks",
+            "gridPos": {
+                "h": 6,
+                "w": 8,
+                "x": 0,
+                "y": 4
+            },
+            "targets": [
+                {
+                    "expr": "sharder_current_size_bytes",
+                    "legendFormat": "bytes"
+                },
+                {
+                    "expr": "sharder_stored_chunks",
+                    "legendFormat": "chunks"
+                }
+            ],
+            "yaxes": [
+                {
+                    "format": "bytes",
+                    "min": 0
+                },
+                {
+                    "format": "short",
+                    "min": 0
+                }
+            ]
+        },
+        {
+            "id": 5,
+            "type": "stat",
+            "title": "Active Uploads",
+            "gridPos": {
+                "h": 4,
+                "w": 4,
+                "x": 8,
+                "y": 4
+            },
+            "targets": [
+                {
+                    "expr": "sharder_active_uploads"
+                }
+            ]
+        },
+        {
+            "id": 6,
+            "type": "graph",
+            "title": "Exporter Scrapes & Bytes",
+            "gridPos": {
+                "h": 6,
+                "w": 8,
+                "x": 0,
+                "y": 10
+            },
+            "targets": [
+                {
+                    "expr": "exposer_scrapes_total",
+                    "legendFormat": "scrapes"
+                },
+                {
+                    "expr": "exposer_transferred_bytes_total",
+                    "legendFormat": "bytes transferred"
+                }
+            ],
+            "yaxes": [
+                {
+                    "format": "short",
+                    "min": 0
+                },
+                {
+                    "format": "bytes",
+                    "min": 0
+                }
+            ]
+        },
+        {
+            "id": 7,
+            "type": "graph",
+            "title": "Request Latencies (μs)",
+            "gridPos": {
+                "h": 6,
+                "w": 8,
+                "x": 8,
+                "y": 10
+            },
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.50, sum(rate(exposer_request_latencies_bucket[5m])) by (le))",
+                    "legendFormat": "p50"
+                },
+                {
+                    "expr": "histogram_quantile(0.90, sum(rate(exposer_request_latencies_bucket[5m])) by (le))",
+                    "legendFormat": "p90"
+                },
+                {
+                    "expr": "histogram_quantile(0.99, sum(rate(exposer_request_latencies_bucket[5m])) by (le))",
+                    "legendFormat": "p99"
+                }
+            ],
+            "yaxes": [
+                {
+                    "format": "μs",
+                    "min": 0
+                },
+                {
+                    "show": false
+                }
+            ]
+        }
+    ]
+}

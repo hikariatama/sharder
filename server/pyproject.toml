@@ -17,6 +17,8 @@ python-ulid = "^3.0.0"
 psycopg2-binary = "^2.9.10"
 python-magic = "^0.4.27"
 bcrypt = "^4.3.0"
+prometheus-fastapi-instrumentator = "^7.1.0"
+prometheus-client = "^0.21.1"
 
 [tool.isort]
 known_local_folder = ["db", "auth", "hub"]

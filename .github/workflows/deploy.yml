@@ -1,0 +1,82 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.5.4
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Check if docker-compose-generator.py has changed
+        id: check_changes
+        run: |
+          if git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -q "docker-compose-generator.py"; then
+            if ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} '[ -f /opt/sharder/docker-compose.yml ]'; then
+              echo "Error: docker-compose-generator.py has changed and docker-compose.yml exists on target"
+              exit 1
+            fi
+          fi
+
+      - name: Prepare remote directory
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+            'mkdir -p /opt/sharder && touch /opt/sharder/.preserve'
+
+      - name: Sync files
+        run: |
+          rsync -avz --exclude '.git*' --exclude 'docker-compose.yml' . ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/opt/sharder
+
+      - name: Run live test on temporary instance
+        run: |
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+            set -euo pipefail
+
+            TMP_DIR=/tmp/sharder-$(openssl rand -hex 4)
+            cp -r /opt/sharder "$TMP_DIR"
+
+            cd "$TMP_DIR"
+            docker compose -p testsharder up -d --build --remove-orphans
+
+            while ! docker compose -p testsharder ps | grep -q "Up"; do
+              echo "Waiting for containers to be up..."
+              sleep 1
+            done
+
+            echo "Just for good luck..."
+            sleep 5
+
+            echo "Running external tests..."
+            TEST_EXIT=0
+            curl -sS https://bootstrap.pypa.io/get-pip.py | python3
+            python3 -m pip install requests-unixsocket
+            python3 test.py || TEST_EXIT=$?
+
+            echo "Cleaning up containers and temporary files..."
+            docker compose -p testsharder down --remove-orphans || true
+            rm -rf "$TMP_DIR" || true
+
+            if [ "$TEST_EXIT" -ne 0 ]; then
+              echo "❌ Tests failed. Aborting."
+              exit 1
+            fi
+
+            echo "✅ Tests passed."
+          EOF
+
+      - name: Deploy with Docker Compose
+        run: |
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+            cd /opt/sharder
+            docker compose pull --ignore-pull-failures
+            docker compose up -d --build --remove-orphans
+          EOF

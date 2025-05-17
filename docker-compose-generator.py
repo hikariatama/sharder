@@ -17,12 +17,6 @@ parser.add_argument(
     default=2,
 )
 parser.add_argument(
-    "--public-port",
-    type=int,
-    help="Public port for the frontend service. This is the port that will be exposed to the outside world.",
-    default=80,
-)
-parser.add_argument(
     "--dev-shards",
     type=int,
     help="Number of local shards to deploy. This is the number of shards that will be deployed locally for development purposes.",
@@ -32,18 +26,18 @@ args = parser.parse_args()
 
 PG_PASSWORD = os.urandom(16).hex()
 CONNECTION_SECRET = os.urandom(16)
+while "/" in base64.b64encode(CONNECTION_SECRET).decode().strip("="):
+    CONNECTION_SECRET = os.urandom(16)
 
 base = {
     "services": {
         "frontend": {
             "build": {"context": "./frontend"},
-            "container_name": "frontend",
             "networks": ["shard_net"],
             "restart": "unless-stopped",
         },
         "server": {
             "build": {"context": "./server"},
-            "container_name": "sharder-server",
             "depends_on": ["postgres"],
             "networks": ["shard_net"],
             "restart": "unless-stopped",
@@ -54,14 +48,20 @@ base = {
                 "CONNECTION_SECRET": CONNECTION_SECRET.hex(),
                 "DB_URL": f"postgresql://shard:{PG_PASSWORD}@postgres/shard",
             },
+            "volumes": ["./prometheus/file_sd:/file_sd"],
         },
         "nginx": {
             "image": "nginx:latest",
-            "ports": [f"{args.public_port}:80"],
             "depends_on": ["frontend", "server"],
             "networks": ["shard_net"],
             "restart": "unless-stopped",
             "volumes": ["./default.conf:/etc/nginx/conf.d/default.conf"],
+        },
+        "nginx-exporter": {
+            "image": "nginx/nginx-prometheus-exporter:latest",
+            "command": "--nginx.scrape-uri=http://nginx:9113/nginx_status --web.listen-address=:9113",
+            "depends_on": ["nginx"],
+            "networks": ["shard_net"],
         },
         "postgres": {
             "image": "postgres:latest",
@@ -74,26 +74,54 @@ base = {
                 "POSTGRES_PASSWORD": PG_PASSWORD,
             },
         },
+        "prometheus": {
+            "image": "prom/prometheus:latest",
+            "volumes": [
+                "./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro",
+                "./prometheus/file_sd:/etc/prometheus/file_sd",
+            ],
+            "networks": ["shard_net"],
+        },
+        "grafana": {
+            "image": "grafana/grafana:latest",
+            "environment": {
+                "GF_SECURITY_ADMIN_PASSWORD": os.urandom(16).hex(),
+                "GF_INSTALL_PLUGINS": "grafana-piechart-panel,grafana-clock-panel",
+            },
+            "volumes": [
+                "grafana-data:/var/lib/grafana",
+                "./grafana/provisioning:/etc/grafana/provisioning:ro",
+            ],
+            "depends_on": ["prometheus"],
+            "networks": ["shard_net"],
+        },
+        "socket-proxy": {
+            "image": "docker.io/alpine/socat",
+            "volumes": ["./socks:/socks", "./socat-entrypoint.sh:/socat-entrypoint.sh"],
+            "entrypoint": ["/bin/sh"],
+            "command": "/socat-entrypoint.sh",
+            "depends_on": ["grafana", "nginx", "prometheus"],
+            "networks": ["shard_net"],
+        },
     },
     "volumes": {
         "postgres-storage": {},
+        "grafana-data": {},
     },
     "networks": {"shard_net": {}},
 }
 
 for i in range(args.dev_shards):
+    token = base64.b64encode(CONNECTION_SECRET).decode().strip("=")
     base["services"][f"shard-{i}"] = {
         "build": {"context": "./shard"},
-        "container_name": f"shard-{i}",
         "networks": ["shard_net"],
         "restart": "unless-stopped",
         "depends_on": ["server"],
-        "environment": {
-            "SHARD_TOKEN": base64.b64encode(CONNECTION_SECRET).decode().strip("=")
-        },
         "volumes": [
             f"shard-{i}-storage:/opt/shard/.data",
         ],
+        "command": f"sh -c 'export SHARD_PUBLIC_IP=$(hostname -i) && ./shard \"http://nginx/api/connect/{token}\" --dry'",
     }
     base["volumes"][f"shard-{i}-storage"] = {}
 
