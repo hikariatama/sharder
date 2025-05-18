@@ -3,12 +3,13 @@ import base64
 import datetime
 import json
 import logging
+import os
 from contextlib import asynccontextmanager
 from threading import Thread
 from typing import Annotated
-import os
 
 import bcrypt
+from fastapi.responses import JSONResponse
 import magic
 from fastapi import (
     Depends,
@@ -20,8 +21,10 @@ from fastapi import (
     WebSocket,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_client import Gauge, Summary
+from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel
-from sqlalchemy import and_
+from sqlalchemy import and_, func
 
 from auth import UserAuth, generate_token, use_auth
 from db import File as FileModel
@@ -37,15 +40,24 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-CONNECTION_SECRET = base64.b64encode(
-    bytes.fromhex(os.environ["CONNECTION_SECRET"])
-).decode().strip("=")
+CONNECTION_SECRET = (
+    base64.b64encode(bytes.fromhex(os.environ["CONNECTION_SECRET"])).decode().strip("=")
+)
+
+
+async def file_quantity_updater():
+    while True:
+        await asyncio.sleep(5)
+        with SessionLocal() as db:
+            file_count = db.query(FileModel.id).with_entities(func.count()).scalar()
+            total_uploads.observe(file_count)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
     Thread(target=sharder_hub.healthcheck, daemon=True).start()
+    asyncio.create_task(file_quantity_updater())
     yield
 
 
@@ -76,6 +88,22 @@ class FilePydantic(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+
+Instrumentator(
+    should_group_status_codes=True,
+    should_ignore_untemplated=True,
+    should_respect_env_var=False,
+    env_var_name="ENABLE_METRICS",
+).instrument(app).expose(app, include_in_schema=False, endpoint="/metrics")
+
+active_uploads = Gauge("sharder_active_uploads", "Ongoing uploads")
+total_uploads = Summary("sharder_total_uploads", "Total uploads")
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 
 
 @app.post("/api/login")
@@ -179,28 +207,32 @@ async def upload_file(
     user: Annotated[UserAuth, Depends(use_auth)],
     file: UploadFile = File(...),
 ):
-    contents = await file.read()
-    file_hmac = await asyncio.get_event_loop().run_in_executor(
-        None,
-        sharder_hub.send,
-        contents,
-    )
-    with SessionLocal() as db:
-        user = db.query(UserModel).filter(UserModel.id == user.id).first()
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid token")
-
-        file_record = FileModel(
-            name=file.filename,
-            size=len(contents),
-            hmac=file_hmac,
-            owner=user,
+    active_uploads.inc()
+    try:
+        contents = await file.read()
+        file_hmac = await asyncio.get_event_loop().run_in_executor(
+            None,
+            sharder_hub.send,
+            contents,
         )
-        db.add(file_record)
-        db.commit()
-        db.refresh(file_record)
+        with SessionLocal() as db:
+            user = db.query(UserModel).filter(UserModel.id == user.id).first()
+            if not user:
+                raise HTTPException(status_code=401, detail="Invalid token")
 
-    return UploadResponse(ulid=file_record.id)
+            file_record = FileModel(
+                name=file.filename,
+                size=len(contents),
+                hmac=file_hmac,
+                owner=user,
+            )
+            db.add(file_record)
+            db.commit()
+            db.refresh(file_record)
+
+        return UploadResponse(ulid=file_record.id)
+    finally:
+        active_uploads.dec()
 
 
 @app.get("/api/files")
@@ -284,6 +316,11 @@ async def websocket_status(websocket: WebSocket):
         pass
     finally:
         await websocket.close()
+
+
+@app.get("/api/healthcheck")
+async def plain_status():
+    return JSONResponse(content="ok", status_code=sharder_hub.status_code)
 
 
 if __name__ == "__main__":

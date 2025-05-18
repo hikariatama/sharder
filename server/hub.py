@@ -1,16 +1,22 @@
 import hmac
+import json
 import logging
 import os
 import random
 import socket
 import struct
 import time
+from typing import Literal
 
 from pydantic import BaseModel
+from prometheus_client import Summary
 
 CHUNKS_PER_FILE = int(os.environ.get("CHUNKS_PER_FILE", 3))
 REPLICAS = int(os.environ.get("REPLICAS", 2))
 HMAC_SECRET = bytes.fromhex(os.environ.get("HMAC_SECRET", "secret"))
+
+size_occupied = Summary("sharder_size_occupied", "Total size occupied on all shards")
+avg_size = Summary("sharder_avg_size", "Average space occupied across shards")
 
 
 class ShardStatus(BaseModel):
@@ -39,6 +45,12 @@ class SharderHub:
     @property
     def status(self) -> list[dict]:
         return [status.model_dump() for status in self._status.values()]
+
+    @property
+    def status_code(self) -> Literal[200] | Literal[503]:
+        if any(status.healthy for status in self._status.values()):
+            return 200
+        return 503
 
     def send(self, data: bytes) -> str:
         chunk_size = (len(data) + CHUNKS_PER_FILE - 1) // CHUNKS_PER_FILE
@@ -173,6 +185,25 @@ class SharderHub:
                         )
                         self._shards.remove(shard)
                         del self._status[shard]
+
+            total_size = sum(status.size for status in self._status.values())
+            size_occupied.observe(total_size)
+            avg_size.observe(total_size / len(self._status) if self._status else 0)
+
+            if os.path.isdir("/file_sd"):
+                with open("/file_sd/shard_targets.json", "w") as f:
+                    json.dump(
+                        [
+                            {
+                                "targets": [
+                                    f"{shard.split(':')[0]}:9100"
+                                    for shard in self._shards
+                                ],
+                                "labels": {"job": "shard_nodes"},
+                            }
+                        ],
+                        f,
+                    )
 
             time.sleep(3)
 
