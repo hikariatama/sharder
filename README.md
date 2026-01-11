@@ -1,6 +1,11 @@
-# Sharder
+<img width="200" src="https://github.com/user-attachments/assets/d7a874a5-296a-4192-94cd-f4cb9271ebb8" />
 
-Sharder is a distributed file storage platform that splits your files into encrypted chunks and spreads them across multiple storage nodes—so your data is safe, private, and always available.
+![academic project](https://img.shields.io/badge/academic%20project-3DB420)
+![source only](https://img.shields.io/badge/source%20only-545454)
+
+> Sharder is a distributed file storage platform that splits your files into encrypted chunks and spreads them across multiple storage nodes—so your data is safe, private, and always available.
+
+<img width="2144" height="1280" alt="sharder" src="https://github.com/user-attachments/assets/5b7eff4c-0732-4017-aa86-d8246f91eedd" />
 
 ## 🛠️ Installation
 
@@ -16,7 +21,6 @@ Sharder is a distributed file storage platform that splits your files into encry
     python3 docker-compose-generator.py \
         --chunks-per-file 2 \
         --replicas 3 \
-        --public-port 3333 \
         --dev-shards 7
     ```
 
@@ -31,7 +35,6 @@ You can tweak your deployment with these options:
 
 - `--chunks-per-file`: How many chunks to split each file into (default: 3)
 - `--replicas`: How many copies of each chunk to keep (default: 2)
-- `--public-port`: Which port to use for the app (default: 80)
 - `--dev-shards`: How many local shards to spin up for testing (default: 0)
 
 ---
